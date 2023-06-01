@@ -14,7 +14,7 @@ from model.sample import Sampler
 from model.network import gradient
 from scipy.spatial import cKDTree
 from utils.plots import plot_surface, plot_cuts
-
+from tqdm import tqdm
 
 class ReconstructionRunner:
 
@@ -37,7 +37,8 @@ class ReconstructionRunner:
 
         print("training")
 
-        for epoch in range(self.startepoch, self.nepochs + 1):
+        for epoch in tqdm(range(self.startepoch, self.nepochs + 1)):
+            print(f"epoch = {epoch}")
 
             indices = torch.tensor(np.random.choice(self.data.shape[0], self.points_batch, False))
 
@@ -62,11 +63,13 @@ class ReconstructionRunner:
 
             mnfld_pred = self.network(mnfld_pnts)
             nonmnfld_pred = self.network(nonmnfld_pnts)
+            print(f"forward pass done")
 
             # compute grad
 
             mnfld_grad = gradient(mnfld_pnts, mnfld_pred)
             nonmnfld_grad = gradient(nonmnfld_pnts, nonmnfld_pred)
+            print(f"gradient computation done")
 
             # manifold loss
 
@@ -177,7 +180,8 @@ class ReconstructionRunner:
         utils.mkdir_ifnotexists(utils.concat_home_dir(os.path.join(self.home_dir, self.exps_folder_name)))
 
         self.input_file = self.conf.get_string('train.input_path')
-        self.data = utils.load_point_cloud_by_file_extension(self.input_file)
+        # self.data = utils.load_point_cloud_by_file_extension(self.input_file)
+        self.data = utils.load_point_cloud_files_from_folder(self.input_file)
 
         sigma_set = []
         ptree = cKDTree(self.data)

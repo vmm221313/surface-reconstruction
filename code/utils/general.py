@@ -1,8 +1,9 @@
 import os
-
-import numpy as np
-import torch
+import glob
 import trimesh
+import numpy as np
+
+import torch
 
 
 def mkdir_ifnotexists(directory):
@@ -48,6 +49,22 @@ def to_cuda(torch_obj):
         return torch_obj.cuda()
     else:
         return torch_obj
+
+
+def load_point_cloud_files_from_folder(dir_path):
+    # TODO: take this from config
+    ext = "xyz" 
+
+    tensor_list = []
+    for file in glob.glob(f"{dir_path}/*.{ext}"):
+        print(f"loading file {file}")
+        tensor_list.append(torch.tensor(trimesh.load(file, ext).vertices).float())
+        print(tensor_list[-1].shape)
+
+    point_set = torch.vstack(tensor_list)
+    print(f"data shape = {point_set.shape}")
+
+    return point_set
 
 
 def load_point_cloud_by_file_extension(file_name):

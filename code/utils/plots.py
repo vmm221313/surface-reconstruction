@@ -1,3 +1,4 @@
+import sys
 import plotly.graph_objs as go
 import plotly.offline as offline
 import torch
@@ -5,6 +6,7 @@ import numpy as np
 from skimage import measure
 import os
 import utils.general as utils
+from chamferdist import ChamferDistance
 
 
 def get_threed_scatter_trace(points,caption = None,colorscale = None,color = None):
@@ -65,6 +67,7 @@ def plot_threed_scatter(points,path,epoch,in_epoch):
 def plot_surface(decoder,path,epoch, shapename,resolution,mc_value,is_uniform_grid,verbose,save_html,save_ply,overwrite, points=None, with_points=False, latent=None, connected=False):
 
     filename = '{0}/igr_{1}_{2}'.format(path, epoch, shapename)
+    chamferDist = ChamferDistance()
 
     if (not os.path.exists(filename) or overwrite):
 
@@ -77,6 +80,18 @@ def plot_surface(decoder,path,epoch, shapename,resolution,mc_value,is_uniform_gr
 
         surface = get_surface_trace(points,decoder,latent,resolution,mc_value,is_uniform_grid,verbose,save_ply, connected)
         trace_surface = surface["mesh_trace"]
+
+        if with_points:
+            try:
+                dist = chamferDist(torch.tensor(surface["mesh_export"].vertices).float().unsqueeze(dim=0), points.unsqueeze(dim=0)).detach().cpu().item()
+            except:
+                print(surface)
+                print(points)
+                print(pnts_val)
+                raise
+
+            filename = '{}_{}'.format(filename, np.round(dist, 4))
+            print(f"Chamfer distance: {dist}")
 
         layout = go.Layout(title= go.layout.Title(text=shapename), width=1200, height=1200, scene=dict(xaxis=dict(range=[-2, 2], autorange=False),
                                                                yaxis=dict(range=[-2, 2], autorange=False),
@@ -124,7 +139,7 @@ def get_surface_trace(points,decoder,latent,resolution,mc_value,is_uniform,verbo
         import trimesh
         z  = z.astype(np.float64)
 
-        verts, faces, normals, values = measure.marching_cubes_lewiner(
+        verts, faces, normals, values = measure.marching_cubes(
             volume=z.reshape(grid['xyz'][1].shape[0], grid['xyz'][0].shape[0],
                              grid['xyz'][2].shape[0]).transpose([1, 0, 2]),
             level=mc_value,
