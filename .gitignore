@@ -11,3 +11,4 @@ err*
 *.pyc
 *DS_Store*
 *.csh
+*test.py

@@ -6,6 +6,10 @@ import numpy as np
 import torch
 
 
+def potential(x):
+    return (0.01*torch.pow(x, 4) - 0.01*torch.pow(x, 2))
+
+
 def mkdir_ifnotexists(directory):
     if not os.path.exists(directory):
         os.mkdir(directory)
