@@ -71,6 +71,7 @@ class ReconstructionRunner:
             nonmnfld_grad = gradient(nonmnfld_pnts, nonmnfld_pred)
             print(f"gradient computation done")
 
+            # test 
             # manifold loss
 
             mnfld_loss = (mnfld_pred.abs()).mean()
