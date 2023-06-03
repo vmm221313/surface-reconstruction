@@ -12,3 +12,4 @@ err*
 *DS_Store*
 *.csh
 *test.py
+data/dfaust/*

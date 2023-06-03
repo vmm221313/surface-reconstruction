@@ -1,4 +1,5 @@
 import os
+import sys
 import glob
 import trimesh
 import numpy as np
@@ -57,15 +58,20 @@ def to_cuda(torch_obj):
 
 def load_point_cloud_files_from_folder(dir_path):
     # TODO: take this from config
+    # ext = "xyz" 
     ext = "xyz" 
 
     tensor_list = []
     for file in glob.glob(f"{dir_path}/*.{ext}"):
         print(f"loading file {file}")
-        tensor_list.append(torch.tensor(trimesh.load(file, ext).vertices).float())
+        if (ext == "npy"):
+            tensor_list.append(torch.from_numpy(np.load(file)).float())
+        else:
+            tensor_list.append(torch.tensor(trimesh.load(file, ext).vertices).float())
         print(tensor_list[-1].shape)
 
     point_set = torch.vstack(tensor_list)
+    point_set = point_set - torch.mean(point_set)
     print(f"data shape = {point_set.shape}")
 
     return point_set
