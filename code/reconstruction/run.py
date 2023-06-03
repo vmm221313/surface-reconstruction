@@ -15,6 +15,9 @@ from model.network import gradient
 from scipy.spatial import cKDTree
 from utils.plots import plot_surface, plot_cuts
 from tqdm import tqdm
+import matplotlib.pyplot as plt 
+import seaborn as sns 
+sns.set_style("darkgrid")
 
 class ReconstructionRunner:
 
@@ -36,6 +39,15 @@ class ReconstructionRunner:
             return
 
         print("training")
+
+        loss_dict = {"loss": []}
+        if (self.conf.get_string('network.loss.type') == "IGR"):
+            loss_dict["manifold_loss"] = []
+            loss_dict["eikonal_loss"] = []
+
+        elif (self.conf.get_string('network.loss.type') == "phase"):
+            loss_dict["reconstruction_loss"] = []
+            loss_dict["regularization_loss"] = []
 
         for epoch in tqdm(range(self.startepoch, self.nepochs + 1)):
             print(f"epoch = {epoch}")
@@ -78,33 +90,47 @@ class ReconstructionRunner:
 
                 loss = mnfld_loss + self.grad_lambda * grad_loss
 
+                # normals loss
+                if self.with_normals:
+                    normals = cur_data[:, -self.d_in:]
+                    normals_loss = ((mnfld_grad - normals).abs()).norm(2, dim=1).mean()
+                    loss = loss + self.normals_lambda * normals_loss
+                else:
+                    normals_loss = torch.zeros(1)
+                
+                loss_dict["loss"].append(loss)
+                loss_dict["manifold_loss"].append(mnfld_loss)
+                loss_dict["eikonal_loss"].append(grad_loss)
+
             elif (self.conf.get_string('network.loss.type') == "phase"):
                 u = mnfld_pred
                 grad_u = mnfld_grad
                 norm_grad_u = grad_u.norm(2, dim=-1)
-                W = utils.potential(u).squeeze()
+                W = utils.potential(u, self.conf.get_float('network.loss.potential_constant')).squeeze()
 
                 # reconstruction term
-                integral_term = torch.trapezoid(torch.abs((self.conf.get_float('network.loss.epsilon') * norm_grad_u) + W))
-                L = (u.abs()).mean()
+                # L = torch.mean(torch.abs(u))
+                L = torch.abs(torch.sum(u)) 
+                integral_term = torch.sum(torch.pow(self.conf.get_float('network.loss.epsilon') * norm_grad_u, 2) + W)
                 reconstruction_loss = (self.conf.get_float('network.loss.lambda') * L) + integral_term
 
                 # regularization term
-                w = (-1) * np.sqrt(self.conf.get_float('network.loss.epsilon')) * torch.log(1 - torch.abs(u)) * torch.sign(u)
+                w = (-1) * np.sqrt(self.conf.get_float('network.loss.epsilon')) * torch.log(torch.abs(1 - torch.abs(u))) * torch.sign(u)
                 grad_w = gradient(mnfld_pnts, w)
                 norm_grad_w = grad_w.norm(2, dim=-1)
-                regularization_loss = torch.mean(torch.abs(1 - norm_grad_w))
+
+                if self.with_normals:
+                    normals = cur_data[:, -self.d_in:]
+                    regularization_loss = torch.mean(torch.pow((normals - grad_w).norm(2, dim=-1), 2))
+                
+                else:
+                    regularization_loss = torch.mean(torch.pow(1 - norm_grad_w, 2))
 
                 loss = reconstruction_loss + (self.conf.get_float('network.loss.mu') * regularization_loss)
-                print(f"{loss=}")
 
-            # normals loss
-            if self.with_normals:
-                normals = cur_data[:, -self.d_in:]
-                normals_loss = ((mnfld_grad - normals).abs()).norm(2, dim=1).mean()
-                loss = loss + self.normals_lambda * normals_loss
-            else:
-                normals_loss = torch.zeros(1)
+                loss_dict["loss"].append(loss)
+                loss_dict["reconstruction_loss"].append(reconstruction_loss)
+                loss_dict["regularization_loss"].append(regularization_loss)
 
             # back propagation
 
@@ -120,12 +146,22 @@ class ReconstructionRunner:
                         '\tGrad loss: {:.6f}\tNormals Loss: {:.6f}'.format(
                         epoch, self.nepochs, 100. * epoch / self.nepochs,
                         loss.item(), mnfld_loss.item(), grad_loss.item(), normals_loss.item()))
-
+                    loss
+                       
                 elif (self.conf.get_string('network.loss.type') == "phase"):
                     print('Train Epoch: [{}/{} ({:.0f}%)]\tTrain Loss: {:.6f}\tReconstruction loss: {:.6f}'
-                                '\tRegularization loss: {:.6f}\tNormals Loss: {:.6f}'.format(
+                                '\tRegularization loss: {:.6f}'.format(
                                 epoch, self.nepochs, 100. * epoch / self.nepochs,
-                                loss.item(), reconstruction_loss.item(), regularization_loss.item(), normals_loss.item()))
+                                loss.item(), reconstruction_loss.item(), regularization_loss.item()))
+        
+        for key in loss_dict.keys():
+            plt.figure(figsize=(10, 8))
+            plt.plot(loss_dict[key], label=key)
+            plt.legend()
+            plt.tight_layout()
+            plt.savefig(self.cur_exp_dir + f"/{key}.png")
+            plt.close()
+
 
     def plot_shapes(self, epoch, path=None, with_cuts=False):
         # plot network validation shapes
