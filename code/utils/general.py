@@ -7,8 +7,8 @@ import numpy as np
 import torch
 
 
-def potential(x, k):
-    return k*(torch.pow(x, 4) - torch.pow(x, 2))
+def potential(x):
+    return (torch.pow(x, 2) - 2*torch.abs(x) + 1)
 
 
 def mkdir_ifnotexists(directory):

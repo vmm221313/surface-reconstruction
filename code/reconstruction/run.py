@@ -69,19 +69,17 @@ class ReconstructionRunner:
             self.network.train()
             self.adjust_learning_rate(epoch)
 
-            nonmnfld_pnts = self.sampler.get_points(mnfld_pnts.unsqueeze(0), mnfld_sigma.unsqueeze(0)).squeeze()
-
             # forward pass
-
             mnfld_pred = self.network(mnfld_pnts)
-            nonmnfld_pred = self.network(nonmnfld_pnts)
 
             # compute grad
-
             mnfld_grad = gradient(mnfld_pnts, mnfld_pred)
-            nonmnfld_grad = gradient(nonmnfld_pnts, nonmnfld_pred)
 
             if (self.conf.get_string('network.loss.type') == "IGR"):
+                nonmnfld_pnts = self.sampler.get_points(mnfld_pnts.unsqueeze(0), mnfld_sigma.unsqueeze(0)).squeeze()
+                nonmnfld_pred = self.network(nonmnfld_pnts)
+                nonmnfld_grad = gradient(nonmnfld_pnts, nonmnfld_pred)
+                
                 # manifold loss
                 mnfld_loss = (mnfld_pred.abs()).mean()
 
@@ -98,24 +96,32 @@ class ReconstructionRunner:
                 else:
                     normals_loss = torch.zeros(1)
                 
-                loss_dict["loss"].append(loss)
-                loss_dict["manifold_loss"].append(mnfld_loss)
-                loss_dict["eikonal_loss"].append(grad_loss)
+                loss_dict["loss"].append(loss.item())
+                loss_dict["manifold_loss"].append(mnfld_loss.item())
+                loss_dict["eikonal_loss"].append(grad_loss.item())
 
             elif (self.conf.get_string('network.loss.type') == "phase"):
-                u = mnfld_pred
-                grad_u = mnfld_grad
-                norm_grad_u = grad_u.norm(2, dim=-1)
-                W = utils.potential(u, self.conf.get_float('network.loss.potential_constant')).squeeze()
+                u = mnfld_pred # [B, 1]
 
-                # reconstruction term
-                # L = torch.mean(torch.abs(u))
-                L = torch.abs(torch.sum(u)) 
-                integral_term = torch.sum(torch.pow(self.conf.get_float('network.loss.epsilon') * norm_grad_u, 2) + W)
+                num_samples = self.conf.get_int('network.loss.sample_count')
+                sigma = self.conf.get_float('network.loss.sampling_sigma')
+                local_x = (mnfld_pnts.unsqueeze(dim=1).repeat(1, num_samples, 1) + (torch.randn((mnfld_pnts.shape[0], num_samples, mnfld_pnts.shape[1])) * sigma).cuda())
+                local_u = self.network(local_x).squeeze()
+
+                # reconstruction term 1 (L)
+                L = torch.mean(torch.abs(torch.mean(local_u, dim=-1)), dim=-1) # [1,]
+
+                # reconstruction term 2 
+                grad_u = mnfld_grad # [B, 3]
+                norm_grad_u = mnfld_grad.norm(2, dim=-1) # [B, 1]
+                epsilon = self.conf.get_float('network.loss.epsilon')
+                W = utils.potential(u) # [B, ]
+                integral_term = torch.mean((epsilon * torch.pow(norm_grad_u, 2)) + W) # [1, ]
+
                 reconstruction_loss = (self.conf.get_float('network.loss.lambda') * L) + integral_term
 
                 # regularization term
-                w = (-1) * np.sqrt(self.conf.get_float('network.loss.epsilon')) * torch.log(torch.abs(1 - torch.abs(u))) * torch.sign(u)
+                w = (-1) * np.sqrt(self.conf.get_float('network.loss.epsilon')) * torch.log(torch.abs(1 - torch.sum(u.squeeze()))) * torch.sign(u)
                 grad_w = gradient(mnfld_pnts, w)
                 norm_grad_w = grad_w.norm(2, dim=-1)
 
@@ -128,9 +134,9 @@ class ReconstructionRunner:
 
                 loss = reconstruction_loss + (self.conf.get_float('network.loss.mu') * regularization_loss)
 
-                loss_dict["loss"].append(loss)
-                loss_dict["reconstruction_loss"].append(reconstruction_loss)
-                loss_dict["regularization_loss"].append(regularization_loss)
+                loss_dict["loss"].append(loss.item())
+                loss_dict["reconstruction_loss"].append(reconstruction_loss.item())
+                loss_dict["regularization_loss"].append(regularization_loss.item())
 
             # back propagation
 
@@ -355,6 +361,7 @@ class ReconstructionRunner:
     def adjust_learning_rate(self, epoch):
         for i, param_group in enumerate(self.optimizer.param_groups):
             param_group["lr"] = self.lr_schedules[i].get_learning_rate(epoch)
+            print(f"Epoch {epoch}: lr = {param_group['lr']}")
 
     def save_checkpoints(self, epoch):
 
