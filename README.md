@@ -1,9 +1,9 @@
-# IGR: Implicit Geometric Regularization for Learning Shapes
+# Phase Transitions, Distance Functions, and Implicit Neural Representations
 <p align="center">
   <img src="IGR.png"/>
 </p>
 
-This repository contains an implementation to the ICML 2020 paper: "Implicit Geometric Regualrization for Learning Shapes".
+This repository contains my attempt at implementing "Phase Transitions, Distance Functions, and Implicit Neural Representations". The code is adapted from the IGR repo: https://github.com/amosgropp/IGR. Thanks to the authors and makers of the original repo for their work!
 
 IGR is a deep learning approach for learning implicit signed distance representations directly from raw point clouds with or without normal data.
 Our method aims to find an SDF by optimizing the network to solve the eikonal equation with the input point cloud as boundary condition.
@@ -11,9 +11,9 @@ Although this is an ill posed condition we enjoy an implicit regualrization comi
 
 For more details:
 
-paper: https://arxiv.org/abs/2002.10099.
+paper: https://arxiv.org/pdf/2106.07689.pdf
 
-video: https://youtu.be/6cOvBGBQF9g.
+video: https://www.youtube.com/watch?v=lmjpyIWIsZg
 
 
 ## Installation Requirmenets
