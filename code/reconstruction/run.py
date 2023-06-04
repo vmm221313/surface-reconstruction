@@ -70,14 +70,24 @@ class ReconstructionRunner:
             self.adjust_learning_rate(epoch)
 
             # forward pass
-            mnfld_pred = self.network(mnfld_pnts)
+            if (self.conf.get_string('train.encoding') == "FF"):
+                mnfld_pnts = torch.fft.fft(mnfld_pnts).real
+                mnfld_pred = torch.fft.ifft(self.network(mnfld_pnts)).real
+
+            else:
+                mnfld_pred = self.network(mnfld_pnts)
 
             # compute grad
             mnfld_grad = gradient(mnfld_pnts, mnfld_pred)
 
             if (self.conf.get_string('network.loss.type') == "IGR"):
                 nonmnfld_pnts = self.sampler.get_points(mnfld_pnts.unsqueeze(0), mnfld_sigma.unsqueeze(0)).squeeze()
-                nonmnfld_pred = self.network(nonmnfld_pnts)
+                if (self.conf.get_string('train.encoding') == "FF"):
+                    nonmnfld_pnts = torch.fft.fft(nonmnfld_pnts).real
+                    nonmnfld_pred = torch.fft.ifft(self.network(nonmnfld_pnts)).real
+
+                else:
+                    nonmnfld_pred = self.network(nonmnfld_pnts)
                 nonmnfld_grad = gradient(nonmnfld_pnts, nonmnfld_pred)
                 
                 # manifold loss
@@ -106,7 +116,12 @@ class ReconstructionRunner:
                 num_samples = self.conf.get_int('network.loss.sample_count')
                 sigma = self.conf.get_float('network.loss.sampling_sigma')
                 local_x = (mnfld_pnts.unsqueeze(dim=1).repeat(1, num_samples, 1) + (torch.randn((mnfld_pnts.shape[0], num_samples, mnfld_pnts.shape[1])) * sigma).cuda())
-                local_u = self.network(local_x).squeeze()
+                if (self.conf.get_string('train.encoding') == "FF"):
+                    local_x = torch.fft.fft(local_x).real
+                    local_u = torch.fft.ifft(self.network(local_x)).real.squeeze()
+
+                else:
+                    local_u = self.network(local_x).squeeze()
 
                 # reconstruction term 1 (L)
                 L = torch.mean(torch.abs(torch.mean(local_u, dim=-1)), dim=-1) # [1,]
